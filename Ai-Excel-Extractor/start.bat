@@ -24,6 +24,6 @@ if errorlevel 1 (
     ollama pull mistral
 )
 
-echo [32m🚀 Starting Industrial Data Processor...[0m
+echo [32m🚀 Starting SCS Excel Processor...[0m
 docker-compose up --build
 pause

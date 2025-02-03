@@ -1,11 +1,12 @@
-from flask import Flask, request, jsonify, send_file, send_from_directory
+from flask import Flask, request, jsonify, send_file, send_from_directory, Response
 import os
 import json
 import pandas as pd
 import logging
+import time
 from pathlib import Path
 from src.excel_parser.excel_parser import ExcelParser
-from src.ai.ollama_handler import process_data
+from src.ai.ollama_handler import parse_description_with_ollama
 import uuid
 from flask_cors import CORS
 
@@ -16,28 +17,35 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize Flask with static folder
-app = Flask(__name__, static_folder='static') 
+app = Flask(__name__, static_folder='static')
 CORS(app)
 app.secret_key = os.urandom(24)
 
 app.config.update({
     'UPLOAD_FOLDER': 'temp/',
     'MAX_CONTENT_LENGTH': 50 * 1024 * 1024,
-    'OLLAMA_MODEL': 'mistral',
-    'OLLAMA_HOST': os.getenv('OLLAMA_HOST', 'localhost')
+    'OLLAMA_MODEL': 'mistral'
 })
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Serve React App - Main HTML
+# Global variable to track progress
+progress_data = {"current": 0, "total": 0}
+
 @app.route('/')
 def serve():
     return send_from_directory(app.static_folder, 'index.html')
 
-# Serve React App - Static Files (JS, CSS, etc.)
 @app.route('/<path:path>')
 def static_files(path):
     return send_from_directory(app.static_folder, path)
+
+@app.route('/api/progress')
+def progress():
+    def generate():
+        while True:
+            yield f"data: {json.dumps(progress_data)}\n\n"
+            time.sleep(0.5)
+    return Response(generate(), mimetype='text/event-stream')
 
 @app.route('/api/upload', methods=['POST'])
 def upload():
@@ -66,10 +74,14 @@ def upload():
 
 @app.route('/api/process', methods=['POST'])
 def process():
+    global progress_data
     temp_excel = None
     json_file = None
     output_excel = None
     try:
+        # Reset progress
+        progress_data = {"current": 0, "total": 0}
+        
         upload_id = request.form['upload_id']
         temp_excel = Path(app.config['UPLOAD_FOLDER']) / f"{upload_id}.xlsx"
         
@@ -80,6 +92,7 @@ def process():
         json_file = temp_excel.with_name(f"{upload_id}.json")
         output_excel = temp_excel.with_name(f"{upload_id}_processed.xlsx")
 
+        logger.info("Starting Excel to JSON conversion...")
         # Excel to JSON conversion
         parser = ExcelParser(str(temp_excel))
         if not parser.load_file(sheet_name=request.form['sheet_name']):
@@ -91,8 +104,31 @@ def process():
             request.form['desc_cell']
         )
         
-        # Process data through AI
-        processed_data = process_data(extracted_data)
+        total_rows = len(extracted_data)
+        progress_data["total"] = total_rows
+        logger.info(f"Processing {total_rows} rows")
+        
+        # Process data through AI with progress tracking
+        processed_data = []
+        for idx, record in enumerate(extracted_data, 1):
+            progress_data["current"] = idx
+            logger.info(f"Processing record {idx}/{total_rows} ({(idx/total_rows)*100:.1f}%)")
+            
+            # Get AI extraction for the description
+            extracted = parse_description_with_ollama(
+                record.get('description', ''),
+                app.config.get('OLLAMA_MODEL', 'mistral')
+            )
+            
+            # Create new record
+            new_record = {
+                "part_number": record.get("part_number"),
+                "description": record.get("description", "")
+            }
+            new_record.update(extracted)
+            processed_data.append(new_record)
+        
+        logger.info("AI processing complete. Saving results...")
         
         # Save processed JSON (temporary)
         with open(json_file, 'w', encoding='utf-8') as f:
@@ -101,7 +137,7 @@ def process():
         # Convert processed data to Excel
         df = pd.DataFrame(processed_data)
         
-        # Define columns order (excluding excel_row)
+        # Define columns order
         columns = [
             'part_number',
             'description',
@@ -150,6 +186,7 @@ def process():
         # Select only the columns we want in the order we want
         df = df[columns]
         
+        logger.info("Generating Excel file...")
         # Save to Excel
         df.to_excel(output_excel, index=False)
         logger.info(f"Generated Excel file at {output_excel}")
@@ -167,6 +204,9 @@ def process():
         return jsonify({'error': str(e)}), 500
         
     finally:
+        # Reset progress
+        progress_data = {"current": 0, "total": 0}
+        
         # Clean up temporary files
         for file in [temp_excel, json_file, output_excel]:
             if file and file.exists():

@@ -18,5 +18,5 @@ if ! curl -s http://localhost:11434/api/tags | grep -q "mistral"; then
     ollama pull mistral
 fi
 
-echo "🚀 Starting Industrial Data Processor..."
+echo "🚀 Starting SCS Excel Processor..."
 docker-compose up --build

@@ -7,6 +7,9 @@ function App() {
   const [sheetNames, setSheetNames] = useState([])
   const [uploadId, setUploadId] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [processingStatus, setProcessingStatus] = useState('');
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
+
 
   const onDrop = useCallback(acceptedFiles => {
     const selectedFile = acceptedFiles[0]
@@ -16,6 +19,20 @@ function App() {
       alert('Please select an Excel file (.xlsx)')
     }
   }, [])
+
+
+  const startProgressMonitoring = () => {
+    const eventSource = new EventSource('/api/progress');
+    
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      setProgress(data);
+    };
+
+    return eventSource;
+  };
+
+
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -63,9 +80,14 @@ function App() {
     }
   }
 
-  const handleProcess = async () => {
+    const handleProcess = async () => {
     try {
       setIsProcessing(true)
+      setProgress({ current: 0, total: 0 })
+      setProcessingStatus('extracting')
+      
+      // Start progress monitoring
+      const eventSource = startProgressMonitoring();
       
       const sheetName = document.getElementById('sheetSelect').value
       const partCell = document.getElementById('partCell').value
@@ -83,15 +105,21 @@ function App() {
       formData.append('desc_cell', descCell)
 
       setCurrentStep('processing')
+      setProcessingStatus('processing')
 
       const response = await fetch('/api/process', {
         method: 'POST',
         body: formData,
       })
 
+      // Close progress monitoring
+      eventSource.close();
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
+
+      setProcessingStatus('generating')
 
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
@@ -115,6 +143,8 @@ function App() {
       setCurrentStep('sheet')
     } finally {
       setIsProcessing(false)
+      setProgress({ current: 0, total: 0 })
+      setProcessingStatus('')
     }
   }
 
@@ -263,17 +293,52 @@ function App() {
               </div>
             </div>
           )}
-
           {currentStep === 'processing' && (
             <div className="card bg-base-100 shadow-xl">
-              <div className="card-body items-center text-center">
-                <div className="loading loading-spinner loading-lg text-primary"></div>
-                <h2 className="card-title mt-4">Processing Your File</h2>
-                <p className="text-base-content/60">This may take a few moments...</p>
-                <div className="mt-4 text-sm text-base-content/60">
-                  <p>• Extracting data from Excel</p>
-                  <p>• Processing through AI</p>
-                  <p>• Generating results</p>
+              <div className="card-body items-center justify-center min-h-[400px]"> {/* Added justify-center and min-h-[400px] */}
+                <div className="w-full max-w-xs flex flex-col items-center justify-center"> {/* Added flex and justify-center */}
+                  <div className="mb-8"> {/* Increased margin-bottom */}
+                    <div className="loading loading-spinner loading-lg text-primary"></div>
+                  </div>
+                  
+                  <div className="mb-8 text-center"> {/* Added text-center and increased margin */}
+                    <h2 className="card-title justify-center mb-2">Processing Your File</h2> {/* Added justify-center and margin */}
+                    <p className="text-base-content/60">This may take a few moments...</p>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="w-full bg-base-200 rounded-full h-2.5 mb-4">
+                    <div 
+                      className="bg-primary h-2.5 rounded-full transition-all duration-300"
+                      style={{ 
+                        width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%` 
+                      }}
+                    ></div>
+                  </div>
+
+                  {/* Progress Text */}
+                  <div className="text-sm text-base-content/70 mb-6"> {/* Added margin */}
+                    {progress.total > 0 && (
+                      <p>
+                        Processing row {progress.current} of {progress.total}
+                        {' '}
+                        ({((progress.current / progress.total) * 100).toFixed(1)}%)
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Processing Steps */}
+                  <div className="text-left text-sm text-base-content/60 w-full"> {/* Added w-full */}
+                    <p className={processingStatus === 'extracting' ? 'text-primary' : ''}>
+                      • Extracting data from Excel
+                    </p>
+                    <p className={processingStatus === 'processing' ? 'text-primary' : ''}>
+                      • Processing through AI
+                    </p>
+                    <p className={processingStatus === 'generating' ? 'text-primary' : ''}>
+                      • Generating results
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

@@ -6,13 +6,13 @@ An AI-powered tool for processing industrial equipment descriptions. This applic
 
 ### Windows
 - Windows 10 or 11
-- 8GB RAM minimum (16GB recommended)
+- 8GB RAM minimum (16GB or higher recommended)
 - 10GB free disk space
 - Internet connection
 
 ### Mac
 - macOS Monterey (12) or later
-- 8GB RAM minimum (16GB recommended)
+- 8GB RAM minimum (16GB or higher recommended)
 - 10GB free disk space
 - Internet connection
 
@@ -30,10 +30,9 @@ An AI-powered tool for processing industrial equipment descriptions. This applic
 2. **Install Ollama**
    - Download [Ollama for Windows](https://ollama.ai/)
    - Run the installer
-   - Follow the installation wizard
-   - Open Command Prompt as Administrator
-   - Run: `ollama serve`
+   - Open Ollama
    - Wait for Ollama to start
+   - Will see a laama icon in the bottom right of screen(might have to toggel the arrow)
 
 3. **Start the Application**
    - Extract the industrial-data-processor.zip to your desired location
@@ -45,6 +44,8 @@ An AI-powered tool for processing industrial equipment descriptions. This applic
      - Install required AI model if needed
      - Start the application
    - Open your web browser and go to http://localhost:5000
+   - Note: Will take a few minutes to build application the first time
+   - Note: Might have to run as admin and if you see firewall popups, click allow
 
 ### Mac Setup
 
@@ -59,28 +60,34 @@ An AI-powered tool for processing industrial equipment descriptions. This applic
    - Download [Ollama for Mac](https://ollama.ai/)
    - Open the downloaded .dmg file
    - Drag Ollama to Applications folder
-   - Open Terminal
-   - Run: `ollama serve`
+   - Run Ollama
    - Wait for Ollama to start
+   - Will see a laama icon in the top right of screen
+
+
 
 3. **Start the Application**
    - Extract the industrial-data-processor.zip to your desired location
    - Open Terminal
    - Navigate to the application folder:
-     ```bash
+     ```zsh
      cd path/to/industrial-data-processor
      ```
    - Make the start script executable (first time only):
-     ```bash
+     ```zsh
      chmod +x start.sh
      ```
+   - If you have permission issues, run this Command
+      ```zsh
+     sudo chmod +x start.sh
+     ```
    - Run the application:
-     ```bash
+     ```zsh
      ./start.sh
      ```
-   - Wait for the application to initialize
-   - Open your web browser and go to http://localhost:5000
 
+   - Wait for the application to build(will take a few minutes the first time)
+   - Open your web browser and go to http://localhost:5000
 ## Using the Application
 
 1. **Prepare Your Excel File**
@@ -92,10 +99,10 @@ An AI-powered tool for processing industrial equipment descriptions. This applic
 2. **Process Files**
    - Click "Upload File" or drag and drop your Excel file
    - Select the appropriate sheet
-   - Enter the starting cell for part numbers (e.g., A2)
-   - Enter the starting cell for descriptions (e.g., B2)
+   - Enter the header cell for part numbers (e.g., A2)
+   - Enter the header cell for descriptions (e.g., B2)
    - Click "Process"
-   - Wait for processing to complete
+   - Wait for processing to complete(will take some time)
    - Download the processed Excel file
 
 3. **Output Format**
@@ -143,7 +150,7 @@ An AI-powered tool for processing industrial equipment descriptions. This applic
 5. **Slow Processing**
    - Check internet connection
    - Ensure computer meets minimum requirements
-   - Try processing smaller batches
+   - Try processing in smaller batches
 
 ### Still Having Issues?
 

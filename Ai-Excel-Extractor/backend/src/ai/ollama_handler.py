@@ -97,11 +97,22 @@ def parse_description_with_ollama(description: str, model_name: str) -> Dict[str
         logger.error(f"Error processing with Ollama: {str(e)}")
         logger.exception("Full error trace:")
         return create_empty_fields()
+
 def process_data(data: List[Dict]) -> List[Dict]:
     """Process a list of records and return updated records with AI extraction"""
     try:
+        total_records = len(data)
         updated_data = []
-        for record in data:
+        
+        for idx, record in enumerate(data, 1):
+            # Log progress
+            progress = {
+                'current': idx,
+                'total': total_records,
+                'percentage': round((idx/total_records)*100, 1)
+            }
+            logger.info(f"Processing record {progress['current']}/{progress['total']} ({progress['percentage']}%)")
+            
             # Get AI extraction for the description
             extracted = parse_description_with_ollama(
                 record.get('description', ''),
@@ -116,7 +127,7 @@ def process_data(data: List[Dict]) -> List[Dict]:
             }
             new_record.update(extracted)
             updated_data.append(new_record)
-        
+            
         return updated_data
             
     except Exception as e:
