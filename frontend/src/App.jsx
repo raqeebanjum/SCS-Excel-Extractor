@@ -250,13 +250,13 @@ function App() {
                   <div className="form-control">
                     <label className="label">
                       <span className="label-text">Part Number Starting Cell</span>
-                      <span className="label-text-alt text-base-content/60">e.g., A2</span>
+                      <span className="label-text-alt text-base-content/60">e.g., A1</span>
                     </label>
                     <input 
                       id="partCell"
                       type="text" 
                       className="input input-bordered"
-                      placeholder="Enter part number header cell, ex: C1"
+                      placeholder="Enter part number header cell"
                       required
                     />
                   </div>
@@ -264,13 +264,13 @@ function App() {
                   <div className="form-control">
                     <label className="label">
                       <span className="label-text">Description Starting Cell</span>
-                      <span className="label-text-alt text-base-content/60">e.g., B2</span>
+                      <span className="label-text-alt text-base-content/60">e.g., B1</span>
                     </label>
                     <input 
                       id="descCell"
                       type="text" 
                       className="input input-bordered"
-                      placeholder="Enter description header cell, ex: D1"
+                      placeholder="Enter description header cell"
                       required
                     />
                   </div>
