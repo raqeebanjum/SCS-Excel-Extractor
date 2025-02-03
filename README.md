@@ -16,6 +16,10 @@ An AI-powered tool for processing industrial equipment descriptions. This applic
 - 10GB free disk space
 - Internet connection
 
+## Download Guide
+   - Click on the code button and download as a zip
+
+
 ## Installation Guide
 
 ### Windows Setup
@@ -41,7 +45,7 @@ An AI-powered tool for processing industrial equipment descriptions. This applic
    - The script will automatically:
      - Check if Docker is running
      - Check if Ollama is running
-     - Install required AI model if needed
+     - Install required AI model needed (will take a few minutes)
      - Start the application
    - Open your web browser and go to http://localhost:5000
    - Note: Will take a few minutes to build application the first time
@@ -65,7 +69,6 @@ An AI-powered tool for processing industrial equipment descriptions. This applic
    - Will see a laama icon in the top right of screen
 
 
-
 3. **Start the Application**
    - Extract the industrial-data-processor.zip to your desired location
    - Open Terminal
@@ -86,7 +89,11 @@ An AI-powered tool for processing industrial equipment descriptions. This applic
      ./start.sh
      ```
 
-   - Wait for the application to build(will take a few minutes the first time)
+   - The script will automatically:
+     - Check if Docker is running
+     - Check if Ollama is running
+     - Install required AI model needed (will take a few minutes)
+     - Build the application(will take a few minutes)
    - Open your web browser and go to http://localhost:5000
 ## Using the Application
 
