@@ -17,7 +17,8 @@ An AI-powered tool for processing industrial equipment descriptions. This applic
 - Internet connection
 
 ## Download Guide
-   - Click on the code button and download as a zip
+   - Click on the code button and Download ZIP
+   - Extract ZIP to desired location
 
 
 ## Installation Guide
@@ -41,11 +42,13 @@ An AI-powered tool for processing industrial equipment descriptions. This applic
 3. **Start the Application**
    - Extract the industrial-data-processor.zip to your desired location
    - Double-click `start-windows.bat`
+      - If you get a warning from windows, click `Run anyway`
    - Wait for the application to initialize
    - The script will automatically:
      - Check if Docker is running
      - Check if Ollama is running
      - Install required AI model needed (will take a few minutes)
+     - Build the application
      - Start the application
    - Open your web browser and go to http://localhost:5000
    - Note: Will take a few minutes to build application the first time
