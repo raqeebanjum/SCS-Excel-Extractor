@@ -36,7 +36,7 @@ An AI-powered tool for processing industrial equipment descriptions. This applic
 
 3. **Start the Application**
    - Extract the industrial-data-processor.zip to your desired location
-   - Double-click `start.bat`
+   - Double-click `start-windows.bat`
    - Wait for the application to initialize
    - The script will automatically:
      - Check if Docker is running
@@ -116,13 +116,14 @@ An AI-powered tool for processing industrial equipment descriptions. This applic
 ### Windows
 1. Go to the Command Prompt window running the application
 2. Press `Ctrl+C`
-3. Type `Y` when prompted
+3. If `Ctrl+C` doesn't work, press `V` to open up Docker Desktop and press the stop button
 4. Close the window
 
 ### Mac
 1. Go to the Terminal window running the application
-2. Press `Command+C`
-3. Close the Terminal window
+2. Press `Ctrl+C`
+3. If `Ctrl+C` doesn't work, press `V` to open up Docker Desktop and press the stop button
+3. Close the  window
 
 ## Troubleshooting
 
