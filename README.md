@@ -40,7 +40,7 @@ An AI-powered tool for processing industrial equipment descriptions. This applic
    - Will see a laama icon in the bottom right of screen(might have to toggel the arrow)
 
 3. **Start the Application**
-   - Extract the industrial-data-processor.zip to your desired location
+   - Extract the ZIP to your desired location
    - Double-click `start-windows.bat`
       - If you get a warning from windows, click `Run anyway`
    - Wait for the application to initialize
@@ -73,11 +73,11 @@ An AI-powered tool for processing industrial equipment descriptions. This applic
 
 
 3. **Start the Application**
-   - Extract the industrial-data-processor.zip to your desired location
+   - Extract the ZIP to your desired location
    - Open Terminal
    - Navigate to the application folder:
      ```zsh
-     cd path/to/industrial-data-processor
+     cd path/to/SCS-Excel-processor
      ```
    - Make the start script executable (first time only):
      ```zsh
