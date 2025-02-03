@@ -256,7 +256,7 @@ function App() {
                       id="partCell"
                       type="text" 
                       className="input input-bordered"
-                      placeholder="A2"
+                      placeholder="Enter part number header cell, ex: C1"
                       required
                     />
                   </div>
@@ -270,7 +270,7 @@ function App() {
                       id="descCell"
                       type="text" 
                       className="input input-bordered"
-                      placeholder="B2"
+                      placeholder="Enter description header cell, ex: D1"
                       required
                     />
                   </div>
