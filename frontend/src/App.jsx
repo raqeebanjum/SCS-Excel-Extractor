@@ -9,6 +9,9 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [processingStatus, setProcessingStatus] = useState('');
   const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [hasProcessedData, setHasProcessedData] = useState(false);
+  const [isPreparingDownload, setIsPreparingDownload] = useState(false);
+  const [processedFilePath, setProcessedFilePath] = useState(null);
 
 
   const onDrop = useCallback(acceptedFiles => {
@@ -19,6 +22,103 @@ function App() {
       alert('Please select an Excel file (.xlsx)')
     }
   }, [])
+
+
+  const handleStopAndSave = async () => {
+    try {
+      setIsPreparingDownload(true);
+      console.log('Sending stop request...');
+      
+      const response = await fetch('/api/stop', {
+        method: 'POST',
+      });
+  
+      console.log('Stop response status:', response.status);
+      const data = await response.json();
+      console.log('Stop response data:', data);
+  
+      if (data.success) {
+        setIsProcessing(false);
+        if (data.filePath) {
+          setProcessedFilePath(data.filePath);
+          setHasProcessedData(true);
+          console.log('File path received:', data.filePath);
+        } else {
+          console.log('No file path in response, but processing stopped');
+        }
+        // Show success message regardless of file path
+        alert('Processing stopped successfully.' + 
+              (data.filePath ? ' You can now download the file.' : ' Please wait a moment before downloading.'));
+      } else {
+        throw new Error(data.error || 'Failed to stop processing');
+      }
+    } catch (error) {
+      console.error('Stop processing error:', error);
+      alert(`Failed to stop processing: ${error.message}`);
+    } finally {
+      setIsPreparingDownload(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    try {
+      setIsPreparingDownload(true);
+      
+      let retries = 3;
+      let response;
+      
+      while (retries > 0) {
+        try {
+          response = await fetch('/api/download', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ filePath: processedFilePath }),
+          });
+  
+          if (response.ok) {
+            break;
+          }
+  
+          // If response wasn't ok, wait before retrying
+          retries--;
+          if (retries > 0) {
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds between retries
+          }
+        } catch (fetchError) {
+          console.error('Fetch attempt failed:', fetchError);
+          retries--;
+          if (retries > 0) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+      }
+  
+      if (!response || !response.ok) {
+        throw new Error('Failed to download after multiple attempts');
+      }
+  
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'processed_results.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      // Optional: Show success message
+      alert('File downloaded successfully!');
+    } catch (error) {
+      console.error('Download failed:', error);
+      alert('Failed to download file. Please try again.');
+    } finally {
+      setIsPreparingDownload(false);
+    }
+  };
+
 
 
   const startProgressMonitoring = () => {
@@ -80,7 +180,7 @@ function App() {
     }
   }
 
-    const handleProcess = async () => {
+  const handleProcess = async () => {
     try {
       setIsProcessing(true)
       setProgress({ current: 0, total: 0 })
@@ -92,36 +192,45 @@ function App() {
       const sheetName = document.getElementById('sheetSelect').value
       const partCell = document.getElementById('partCell').value
       const descCell = document.getElementById('descCell').value
-
+  
       if (!sheetName || !partCell || !descCell) {
         alert('Please fill in all fields')
         return
       }
-
+  
+      console.log('Starting process with:', { sheetName, partCell, descCell, uploadId });
+  
       const formData = new FormData()
       formData.append('upload_id', uploadId)
       formData.append('sheet_name', sheetName)
       formData.append('part_cell', partCell)
       formData.append('desc_cell', descCell)
-
+  
       setCurrentStep('processing')
       setProcessingStatus('processing')
-
+  
+      console.log('Sending process request...');
       const response = await fetch('/api/process', {
         method: 'POST',
         body: formData,
       })
-
+  
+      console.log('Process response status:', response.status);
+  
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('Process error response:', errorData);
+        throw new Error(`Processing failed: ${errorData}`);
+      }
+  
       // Close progress monitoring
       eventSource.close();
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
+  
       setProcessingStatus('generating')
-
+  
       const blob = await response.blob()
+      console.log('Received blob:', blob);
+  
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -130,7 +239,7 @@ function App() {
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
-
+  
       alert('Processing complete! Excel file downloaded.')
       setCurrentStep('upload')
       setFile(null)
@@ -139,7 +248,7 @@ function App() {
       
     } catch (error) {
       console.error('Processing failed:', error)
-      alert('Failed to process file. Please try again.')
+      alert(`Failed to process file: ${error.message}`)
       setCurrentStep('sheet')
     } finally {
       setIsProcessing(false)
@@ -295,14 +404,14 @@ function App() {
           )}
           {currentStep === 'processing' && (
             <div className="card bg-base-100 shadow-xl">
-              <div className="card-body items-center justify-center min-h-[400px]"> {/* Added justify-center and min-h-[400px] */}
-                <div className="w-full max-w-xs flex flex-col items-center justify-center"> {/* Added flex and justify-center */}
-                  <div className="mb-8"> {/* Increased margin-bottom */}
+              <div className="card-body items-center justify-center min-h-[400px]"> 
+                <div className="w-full max-w-xs flex flex-col items-center justify-center">
+                  <div className="mb-8"> 
                     <div className="loading loading-spinner loading-lg text-primary"></div>
                   </div>
                   
-                  <div className="mb-8 text-center"> {/* Added text-center and increased margin */}
-                    <h2 className="card-title justify-center mb-2">Processing Your File</h2> {/* Added justify-center and margin */}
+                  <div className="mb-8 text-center">
+                    <h2 className="card-title justify-center mb-2">Processing Your File</h2> 
                     <p className="text-base-content/60">This may take a few moments...</p>
                   </div>
 
@@ -317,7 +426,7 @@ function App() {
                   </div>
 
                   {/* Progress Text */}
-                  <div className="text-sm text-base-content/70 mb-6"> {/* Added margin */}
+                  <div className="text-sm text-base-content/70 mb-6">
                     {progress.total > 0 && (
                       <p>
                         Processing row {progress.current} of {progress.total}
@@ -328,7 +437,7 @@ function App() {
                   </div>
 
                   {/* Processing Steps */}
-                  <div className="text-left text-sm text-base-content/60 w-full"> {/* Added w-full */}
+                  <div className="text-left text-sm text-base-content/60 w-full mb-8">
                     <p className={processingStatus === 'extracting' ? 'text-primary' : ''}>
                       • Extracting data from Excel
                     </p>
@@ -338,6 +447,42 @@ function App() {
                     <p className={processingStatus === 'generating' ? 'text-primary' : ''}>
                       • Generating results
                     </p>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-4 w-full">
+                    <button 
+                      className="btn btn-warning flex-1"
+                      onClick={() => {
+                        if (window.confirm('Are you sure you want to stop processing? This will save all processed rows so far.')) {
+                          handleStopAndSave();
+                        }
+                      }}
+                      disabled={!isProcessing || isPreparingDownload}
+                    >
+                      {isPreparingDownload ? (
+                        <>
+                          <span className="loading loading-spinner loading-sm"></span>
+                          Stopping...
+                        </>
+                      ) : (
+                        'Stop & Save'
+                      )}
+                    </button>
+                    <button 
+                      className="btn btn-primary flex-1"
+                      onClick={handleDownload}
+                      disabled={isProcessing || !hasProcessedData || isPreparingDownload}
+                    >
+                      {isPreparingDownload ? (
+                        <>
+                          <span className="loading loading-spinner loading-sm"></span>
+                          Preparing...
+                        </>
+                      ) : (
+                        'Download'
+                      )}
+                    </button>
                   </div>
                 </div>
               </div>

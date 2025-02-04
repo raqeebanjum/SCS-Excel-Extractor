@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import time
 import ollama
 import requests 
 from flask import current_app
@@ -25,26 +26,11 @@ TARGET_COLUMNS = [
     "Pressure", "Flow Rate", "Temperature", "Other"
 ]
 
+
+
 def create_empty_fields() -> Dict[str, str]:
     return {field: "" for field in TARGET_COLUMNS}
 
-def build_prompt(description: str) -> str:
-    fields_json = create_empty_fields()
-    json_structure = json.dumps(fields_json, indent=2)
-    
-    return f"""
-As an industrial equipment expert, extract the following fields from this description.
-Return them as strings exactly. Use empty string if not present. Keep part numbers identical.
-Return only valid JSON with these exact fields:
-
-Description:
-{description}
-
-Required JSON structure:
-{json_structure}
-
-Only include the JSON object with no extra text.
-"""
 
 
 def parse_description_with_ollama(description: str, model_name: str) -> Dict[str, Any]:
@@ -54,45 +40,83 @@ def parse_description_with_ollama(description: str, model_name: str) -> Dict[str
     try:
         # Get base URL and log connection attempt
         base_url = os.getenv('OLLAMA_BASE_URL', 'http://host.docker.internal:11434')
-        logger.info(f"Connecting to Ollama at: {base_url}")
-
-        # Test connection to Ollama
-        try:
-            test_response = requests.get(f"{base_url}/api/tags")
-            logger.info(f"Ollama connection test successful. Status: {test_response.status_code}")
-        except Exception as e:
-            logger.error(f"Failed to connect to Ollama: {e}")
-            raise
+        logger.info(f"Processing description: {description[:100]}...")  # Log first 100 chars
 
         # Create Ollama client with custom host
         client = ollama.Client(host=base_url)
         
-        # Make the API call
-        response = client.chat(
-            model=model_name,
-            messages=[{
-                "role": "user", 
-                "content": build_prompt(description)
-            }],
-            options={'temperature': 0.1}
-        )
+        # Add explicit formatting instructions to the prompt
+        prompt = f"""
+As an industrial equipment expert, extract the following fields from this description.
+Return them as strings exactly. Use empty string if not present.
+IMPORTANT: Return ONLY valid JSON with these exact fields, nothing else.
+Ensure all property names are in double quotes and all values are strings.
+
+Description:
+{description}
+
+Required JSON structure:
+{json.dumps(create_empty_fields(), indent=2)}
+
+Remember: Return ONLY the JSON object, no additional text.
+"""
+
+        # Make the API call with retry logic
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = client.chat(
+                    model=model_name,
+                    messages=[{
+                        "role": "user", 
+                        "content": prompt
+                    }],
+                    options={'temperature': 0.1}  # Lower temperature for more consistent output
+                )
+                
+                response_text = response["message"]["content"].strip()
+                
+                # Clean the response text
+                response_text = response_text.replace('\n', ' ').replace('\r', '')
+                response_text = ' '.join(response_text.split())  # Normalize whitespace
+                
+                # Extract JSON from response
+                start = response_text.find('{')
+                end = response_text.rfind('}') + 1
+                
+                if 0 <= start < end:
+                    json_text = response_text[start:end]
+                    
+                    # Validate JSON structure before parsing
+                    try:
+                        extracted_fields = json.loads(json_text)
+                        
+                        # Ensure all values are strings
+                        extracted_fields = {k: str(v) if v is not None else "" for k, v in extracted_fields.items()}
+                        
+                        # Ensure all required fields exist
+                        fields = create_empty_fields()
+                        fields.update(extracted_fields)
+                        
+                        logger.info("Successfully extracted fields")
+                        return fields
+                        
+                    except json.JSONDecodeError as json_error:
+                        logger.error(f"JSON parsing error on attempt {attempt + 1}: {str(json_error)}")
+                        if attempt == max_retries - 1:
+                            raise
+                        continue
+                
+                logger.warning(f"No valid JSON found in response on attempt {attempt + 1}")
+                
+            except Exception as e:
+                logger.error(f"Attempt {attempt + 1} failed: {str(e)}")
+                if attempt == max_retries - 1:
+                    raise
+                time.sleep(1)  # Wait before retrying
         
-        logger.info("Got response from Ollama")
-        response_text = response["message"]["content"].strip()
-        
-        # Extract JSON from response
-        start = response_text.find('{')
-        end = response_text.rfind('}') + 1
-        if 0 <= start < end:
-            extracted_fields = json.loads(response_text[start:end])
-            fields = create_empty_fields()
-            fields.update(extracted_fields)
-            logger.info("Successfully extracted fields from response")
-            return fields
-        
-        logger.warning("No valid JSON found in response")
         return create_empty_fields()
-    
+        
     except Exception as e:
         logger.error(f"Error processing with Ollama: {str(e)}")
         logger.exception("Full error trace:")
