@@ -42,7 +42,7 @@ def parse_description_with_ollama(description: str, model_name: str) -> Dict[str
         client = ollama.Client(host=base_url)
         
         prompt = f"""
-As an industrial equipment expert, extract the following fields from this description.
+As an industrial equipment expert, extract as much data the following fields from this description as possible that you are confident about.
 Return them as strings exactly. Use empty string if not present.
 IMPORTANT: Return ONLY valid JSON with these exact fields, nothing else.
 Ensure all property names are in double quotes and all values are strings.
