@@ -38,14 +38,9 @@ def parse_description_with_ollama(description: str, model_name: str) -> Dict[str
         return create_empty_fields()
     
     try:
-        # Get base URL and log connection attempt
         base_url = os.getenv('OLLAMA_BASE_URL', 'http://host.docker.internal:11434')
-        logger.info(f"Processing description: {description[:100]}...")  # Log first 100 chars
-
-        # Create Ollama client with custom host
         client = ollama.Client(host=base_url)
         
-        # Add explicit formatting instructions to the prompt
         prompt = f"""
 As an industrial equipment expert, extract the following fields from this description.
 Return them as strings exactly. Use empty string if not present.
@@ -71,55 +66,40 @@ Remember: Return ONLY the JSON object, no additional text.
                         "role": "user", 
                         "content": prompt
                     }],
-                    options={'temperature': 0.1}  # Lower temperature for more consistent output
+                    options={'temperature': 0.1}
                 )
                 
                 response_text = response["message"]["content"].strip()
-                
-                # Clean the response text
                 response_text = response_text.replace('\n', ' ').replace('\r', '')
-                response_text = ' '.join(response_text.split())  # Normalize whitespace
+                response_text = ' '.join(response_text.split())
                 
-                # Extract JSON from response
                 start = response_text.find('{')
                 end = response_text.rfind('}') + 1
                 
                 if 0 <= start < end:
                     json_text = response_text[start:end]
                     
-                    # Validate JSON structure before parsing
                     try:
                         extracted_fields = json.loads(json_text)
-                        
-                        # Ensure all values are strings
                         extracted_fields = {k: str(v) if v is not None else "" for k, v in extracted_fields.items()}
-                        
-                        # Ensure all required fields exist
                         fields = create_empty_fields()
                         fields.update(extracted_fields)
-                        
-                        logger.info("Successfully extracted fields")
                         return fields
                         
-                    except json.JSONDecodeError as json_error:
-                        logger.error(f"JSON parsing error on attempt {attempt + 1}: {str(json_error)}")
+                    except json.JSONDecodeError:
                         if attempt == max_retries - 1:
                             raise
                         continue
                 
-                logger.warning(f"No valid JSON found in response on attempt {attempt + 1}")
-                
             except Exception as e:
-                logger.error(f"Attempt {attempt + 1} failed: {str(e)}")
                 if attempt == max_retries - 1:
                     raise
-                time.sleep(1)  # Wait before retrying
+                time.sleep(1)
         
         return create_empty_fields()
         
     except Exception as e:
-        logger.error(f"Error processing with Ollama: {str(e)}")
-        logger.exception("Full error trace:")
+        logger.error(f"Extraction error: {str(e)}")
         return create_empty_fields()
 
 def process_data(data: List[Dict]) -> List[Dict]:

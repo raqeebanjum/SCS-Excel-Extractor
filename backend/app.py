@@ -151,47 +151,37 @@ def process():
     output_excel = None
     try:
         logger.info("Starting process")
-        logger.info(f"Form data: {request.form}")
         
         # Reset stop signal and progress
         stop_processing.clear()
         progress_data = {"current": 0, "total": 0}
         
         upload_id = request.form['upload_id']
-        logger.info(f"Upload ID: {upload_id}")
-        
         temp_excel = Path(app.config['UPLOAD_FOLDER']) / f"{upload_id}.xlsx"
-        logger.info(f"Temp Excel path: {temp_excel}")
         
         if not temp_excel.exists():
-            logger.error(f"Excel file not found at {temp_excel}")
+            logger.error("File not found")
             return jsonify({'error': 'Invalid file session'}), 400
 
         # Create file paths
         output_excel = temp_excel.with_name(f"{upload_id}_processed.xlsx")
         current_output_file = output_excel
-        logger.info(f"Output Excel path: {output_excel}")
 
-        logger.info("Starting Excel to JSON conversion...")
         # Excel to JSON conversion
         parser = ExcelParser(str(temp_excel))
         
-        sheet_name = request.form['sheet_name']
-        logger.info(f"Loading sheet: {sheet_name}")
-        
-        if not parser.load_file(sheet_name=sheet_name):
-            logger.error(f"Invalid sheet name: {sheet_name}")
+        if not parser.load_file(sheet_name=request.form['sheet_name']):
+            logger.error("Invalid sheet name")
             return jsonify({'error': 'Invalid sheet name'}), 400
         
         # Get basic data
-        part_cell = request.form['part_cell']
-        desc_cell = request.form['desc_cell']
-        logger.info(f"Extracting data from cells - Part: {part_cell}, Desc: {desc_cell}")
-        
-        extracted_data = parser.extract_data(part_cell, desc_cell)
+        extracted_data = parser.extract_data(
+            request.form['part_cell'], 
+            request.form['desc_cell']
+        )
         
         if not extracted_data:
-            logger.error("No data extracted from Excel")
+            logger.error("No data found")
             return jsonify({'error': 'No data found in specified cells'}), 400
             
         total_rows = len(extracted_data)
@@ -199,8 +189,8 @@ def process():
         logger.info(f"Processing {total_rows} rows")
         
         # Process data through AI with progress tracking
+                # Process data through AI with progress tracking
         processed_data = []
-        # In your process route
         for idx, record in enumerate(extracted_data, 1):
             try:
                 if stop_processing.is_set():
@@ -208,24 +198,38 @@ def process():
                     break
                     
                 progress_data["current"] = idx
-                logger.info(f"Processing record {idx}/{total_rows} ({(idx/total_rows)*100:.1f}%)")
+                
+                description = record.get('description', '').strip()
+                
+                # Skip AI processing for empty or invalid descriptions
+                if description in ['???', '(blank)', '']:
+                    logger.info(f"Row {idx}/{total_rows} - Skipped (empty description)")
+                    new_record = {
+                        "part_number": record.get("part_number"),
+                        "description": description
+                    }
+                    new_record.update(create_empty_fields())
+                    processed_data.append(new_record)
+                    continue
+                
+                logger.info(f"Row {idx}/{total_rows} ({(idx/total_rows)*100:.1f}%)")
                 
                 # Get AI extraction for the description
                 extracted = parse_description_with_ollama(
-                    record.get('description', ''),
+                    description,
                     app.config.get('OLLAMA_MODEL', 'mistral')
                 )
                 
                 # Create new record
                 new_record = {
                     "part_number": record.get("part_number"),
-                    "description": record.get("description", "")
+                    "description": description
                 }
                 new_record.update(extracted)
                 processed_data.append(new_record)
                 
             except Exception as e:
-                logger.error(f"Error processing record {idx}: {str(e)}")
+                logger.error(f"Error on row {idx}")
                 # Continue with empty fields rather than failing
                 new_record = {
                     "part_number": record.get("part_number"),
@@ -234,7 +238,7 @@ def process():
                 new_record.update(create_empty_fields())
                 processed_data.append(new_record)
         
-        logger.info("AI processing complete. Saving results...")
+        logger.info("Processing complete")
         
         # Convert processed data to Excel
         df = pd.DataFrame(processed_data)
@@ -288,7 +292,7 @@ def process():
         # Select only the columns we want in the order we want
         df = df[columns]
         
-        logger.info("Generating Excel file...")
+        logger.info("Generating Excel file")
         
         try:
             df.to_excel(
@@ -297,15 +301,14 @@ def process():
                 engine='openpyxl',
                 sheet_name='Processed Data'
             )
-            logger.info(f"Generated Excel file at {output_excel}")
         except Exception as excel_error:
-            logger.error(f"Excel creation error: {str(excel_error)}")
+            logger.error(f"Excel creation failed")
             raise
 
         # Check if processing was stopped early
         was_stopped = stop_processing.is_set()
         if was_stopped:
-            logger.info("Processing was stopped by user. Sending partial results.")
+            logger.info("Sending partial results")
 
         # Verify file exists and is not empty
         if not output_excel.exists():
@@ -323,7 +326,7 @@ def process():
         )
 
     except Exception as e:
-        logger.exception("Detailed process error:") 
+        logger.error(f"Process failed: {str(e)}")
         return jsonify({'error': str(e)}), 500
         
     finally:
@@ -336,9 +339,8 @@ def process():
             if file and file.exists():
                 try:
                     file.unlink()
-                    logger.info(f"Cleaned up {file.name}")
                 except Exception as e:
-                    logger.error(f"Error cleaning up {file.name}: {str(e)}")
+                    logger.error(f"Cleanup failed: {str(e)}")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
