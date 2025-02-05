@@ -177,7 +177,8 @@ def process():
         # Get basic data
         extracted_data = parser.extract_data(
             request.form['part_cell'], 
-            request.form['desc_cell']
+            request.form['desc_cell'],
+            request.form['vendor_cell']
         )
         
         if not extracted_data:
@@ -247,6 +248,7 @@ def process():
         columns = [
             'part_number',
             'description',
+            'Vendor',
             'Size',
             'Length',
             'Height',

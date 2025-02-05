@@ -192,8 +192,10 @@ function App() {
       const sheetName = document.getElementById('sheetSelect').value
       const partCell = document.getElementById('partCell').value
       const descCell = document.getElementById('descCell').value
+      const vendorCell = document.getElementById('vendorCell').value 
+
   
-      if (!sheetName || !partCell || !descCell) {
+      if (!sheetName || !partCell || !descCell || !vendorCell) {
         alert('Please fill in all fields')
         return
       }
@@ -205,6 +207,7 @@ function App() {
       formData.append('sheet_name', sheetName)
       formData.append('part_cell', partCell)
       formData.append('desc_cell', descCell)
+      formData.append('vendor_cell', vendorCell)
   
       setCurrentStep('processing')
       setProcessingStatus('processing')
@@ -380,6 +383,21 @@ function App() {
                       type="text" 
                       className="input input-bordered"
                       placeholder="Enter description header cell"
+                      required
+                    />
+                  </div>
+
+                  {/* Add new Vendor Cell input */}
+                  <div className="form-control">
+                    <label className="label">
+                      <span className="label-text">Vendor Starting Cell</span>
+                      <span className="label-text-alt text-base-content/60">e.g., C1</span>
+                    </label>
+                    <input 
+                      id="vendorCell"
+                      type="text" 
+                      className="input input-bordered"
+                      placeholder="Enter vendor header cell"
                       required
                     />
                   </div>
