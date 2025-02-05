@@ -75,26 +75,27 @@ class ExcelParser:
             logger.error(f"Load Error: {str(e)}")
             return False
 
-    def extract_data(self, part_cell: str, desc_cell: str) -> List[Dict]:
+    def extract_data(self, part_cell: str, desc_cell: str, vendor_cell: str) -> List[Dict]:
         try:
             pn_row, pn_col = self.cell_to_indices(part_cell)
             desc_row, desc_col = self.cell_to_indices(desc_cell)
+            vendor_row, vendor_col = self.cell_to_indices(vendor_cell)
             
-            if pn_row != desc_row:
+            if not (pn_row == desc_row == vendor_row):
                 raise ValueError("Start cells must be on same row")
             
             data = []
             for idx in range(pn_row, len(self.df)):
                 part = self._clean_value(self.df.iloc[idx, pn_col])
                 desc = self._clean_value(self.df.iloc[idx, desc_col])
+                vendor = self._clean_value(self.df.iloc[idx, vendor_col])
                 
-                # Include excel_row, part_number and description
-                if part or desc:  # Only add if either field has content
-                    data.append({
-                        "excel_row": idx + 1,
-                        "part_number": part,
-                        "description": desc
-                    })
+                data.append({
+                    "excel_row": idx + 1,
+                    "part_number": part,
+                    "description": desc,
+                    "vendor": vendor
+                })
             
             return data
         except Exception as e:
