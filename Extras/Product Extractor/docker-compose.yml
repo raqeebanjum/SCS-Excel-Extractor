@@ -15,7 +15,6 @@ services:
       - ollama
     environment:
       - OLLAMA_HOST=http://ollama:11434
-    # Add this to make it interactive
     stdin_open: true
     tty: true
 
