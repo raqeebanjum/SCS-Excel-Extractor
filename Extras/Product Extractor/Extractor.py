@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class AIProcessor:
     def __init__(self):
         self.model = "mistral"
-        self.api_url = "http://localhost:11434/api/generate"
+        self.api_url = os.getenv('OLLAMA_HOST', 'http://localhost:11434') + '/api/generate'
         
     def _call_ollama(self, prompt: str) -> str:
         """Make a call to Ollama API"""
