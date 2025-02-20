@@ -5,6 +5,8 @@ import logging
 import requests
 from typing import List, Dict, Set
 import os
+import time
+from requests.exceptions import ConnectionError
 
 # Configure logging
 logging.basicConfig(
@@ -17,23 +19,53 @@ class AIProcessor:
     def __init__(self):
         self.model = "mistral"
         self.api_url = os.getenv('OLLAMA_HOST', 'http://localhost:11434') + '/api/generate'
-        
+        self.max_retries = 5
+        self.retry_delay = 2
+
+    def _wait_for_ollama(self):
+        """Wait for Ollama to become available"""
+        logger.info("Waiting for Ollama service to be ready...")
+        for attempt in range(self.max_retries):
+            try:
+                response = requests.get(self.api_url.replace('/generate', '/version'))
+                if response.status_code == 200:
+                    logger.info("Ollama service is ready")
+                    return True
+            except ConnectionError:
+                logger.warning(f"Attempt {attempt + 1}/{self.max_retries}: Ollama not ready yet")
+                time.sleep(self.retry_delay)
+        return False
+
     def _call_ollama(self, prompt: str) -> str:
-        """Make a call to Ollama API"""
-        try:
-            response = requests.post(
-                self.api_url,
-                json={
-                    "model": self.model,
-                    "prompt": prompt,
-                    "stream": False
-                }
-            )
-            response.raise_for_status()
-            return response.json()['response']
-        except Exception as e:
-            logger.error(f"Ollama API error: {e}")
-            return ""
+        """Make a call to Ollama API with retry mechanism"""
+        if not self._wait_for_ollama():
+            logger.error("Failed to connect to Ollama after multiple attempts")
+            return ''
+
+        for attempt in range(self.max_retries):
+            try:
+                response = requests.post(
+                    self.api_url,
+                    json={
+                        "model": self.model,
+                        "prompt": prompt,
+                        "stream": False
+                    }
+                )
+                if response.status_code == 200:
+                    return response.json().get('response', '')
+                else:
+                    logger.error(f"Ollama API error: Status code {response.status_code}")
+            except ConnectionError as e:
+                logger.warning(f"Attempt {attempt + 1}/{self.max_retries}: Connection failed")
+                if attempt < self.max_retries - 1:
+                    time.sleep(self.retry_delay)
+                continue
+            except Exception as e:
+                logger.error(f"Ollama API error: {e}")
+                return ''
+        return ''
+
     
     def process_for_categories(self, descriptions: List[str], existing_categories: List[str]) -> List[str]:
         """Process descriptions to identify categories"""
@@ -206,6 +238,10 @@ class AIProcessor:
         return subcategories or []  # Return empty list if no subcategories found
 
 def main():
+    
+    logger.info("Starting up... waiting for services to be ready")
+    time.sleep(5)  # Give Ollama container time to start
+
     excel_reader = ExcelReader("input.xlsx")
     category_manager = CategoryManager()
     ai_processor = AIProcessor()
