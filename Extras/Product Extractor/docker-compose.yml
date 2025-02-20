@@ -6,7 +6,7 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-    
+
   extractor:
     build: .
     volumes:
@@ -15,6 +15,9 @@ services:
       - ollama
     environment:
       - OLLAMA_HOST=http://ollama:11434
+    # Add this to make it interactive
+    stdin_open: true
+    tty: true
 
 volumes:
   ollama_data:
