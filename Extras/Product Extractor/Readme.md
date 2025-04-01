@@ -1,13 +1,36 @@
-# Build and run with Docker Compose
-docker-compose up --build
+# Navigate to your project directory
+cd path/to/your/project
 
-# Or to run in detached mode
-docker-compose up -d --build
+# Create virtual environment
+python3 -m venv venv
 
-##
-docker-compose up ollama
-docker-compose run extractor python Extractor.py
+# Activate virtual environment
+source venv/bin/activate
+
+# Install requirements
+pip install -r requirements.txt
+
+# To deactivate when done
+deactivate
 
 
-docker-compose run extractor
+#########################################
+# Navigate to your project directory
+cd path\to\your\project
+
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment (Command Prompt)
+venv\Scripts\activate
+
+# OR for PowerShell
+.\venv\Scripts\Activate.ps1
+
+# Install requirements
+pip install -r requirements.txt
+
+# To deactivate when done
+deactivate
+
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser

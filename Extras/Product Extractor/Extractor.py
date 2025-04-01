@@ -1,12 +1,10 @@
 import pandas as pd
 import json
-from pathlib import Path
 import logging
-import requests
+from pathlib import Path
+import re
 from typing import List, Dict, Set
-import os
-import time
-from requests.exceptions import ConnectionError
+from difflib import SequenceMatcher
 
 # Configure logging
 logging.basicConfig(
@@ -15,311 +13,146 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class AIProcessor:
+class TextNormalizer:
     def __init__(self):
-        self.model = "mistral"
-        self.api_url = os.getenv('OLLAMA_HOST', 'http://localhost:11434') + '/api/generate'
-        self.max_retries = 5
-        self.retry_delay = 2
-
-    def _wait_for_ollama(self):
-        """Wait for Ollama to become available"""
-        logger.info("Waiting for Ollama service to be ready...")
-        for attempt in range(self.max_retries):
-            try:
-                response = requests.get(self.api_url.replace('/generate', '/version'))
-                if response.status_code == 200:
-                    logger.info("Ollama service is ready")
-                    return True
-            except ConnectionError:
-                logger.warning(f"Attempt {attempt + 1}/{self.max_retries}: Ollama not ready yet")
-                time.sleep(self.retry_delay)
-        return False
-
-    def _call_ollama(self, prompt: str) -> str:
-        """Make a call to Ollama API with retry mechanism"""
-        if not self._wait_for_ollama():
-            logger.error("Failed to connect to Ollama after multiple attempts")
-            return ''
-
-        for attempt in range(self.max_retries):
-            try:
-                response = requests.post(
-                    self.api_url,
-                    json={
-                        "model": self.model,
-                        "prompt": prompt,
-                        "stream": False
-                    }
-                )
-                if response.status_code == 200:
-                    return response.json().get('response', '')
-                else:
-                    logger.error(f"Ollama API error: Status code {response.status_code}")
-            except ConnectionError as e:
-                logger.warning(f"Attempt {attempt + 1}/{self.max_retries}: Connection failed")
-                if attempt < self.max_retries - 1:
-                    time.sleep(self.retry_delay)
-                continue
-            except Exception as e:
-                logger.error(f"Ollama API error: {e}")
-                return ''
-        return ''
-
-    
-    def process_for_categories(self, descriptions: List[str], existing_categories: List[str]) -> List[str]:
-        """Process descriptions to identify categories"""
-        prompt = f"""Analyze these technical product descriptions and identify the main product categories.
-        
-        Existing categories: {', '.join(existing_categories)}
-        Either match to existing categories or create new ones only if truly different.
-        
-        Descriptions:
-        {' | '.join(descriptions)}
-        
-        Return ONLY a list of category names, one per line, nothing else.
-        Be specific and consistent."""
-        
-        try:
-            response = self._call_ollama(prompt)
-            # Split response into lines and clean
-            categories = [
-                cat.strip() for cat in response.split('\n')
-                if cat.strip() and not cat.startswith('-')
-            ]
-            return categories
-        except Exception as e:
-            logger.error(f"Error processing categories: {e}")
-            return []
-    
-    def process_for_subcategories(self, category: str, descriptions: List[str], existing_subcategories: List[str]) -> List[str]:
-        """Process descriptions to identify subcategories for a given category"""
-        prompt = f"""For the product category '{category}', analyze these descriptions and identify specific subcategories.
-        
-        Existing subcategories: {', '.join(existing_subcategories)}
-        Either match to existing subcategories or create new ones only if truly different.
-        
-        Descriptions:
-        {' | '.join(descriptions)}
-        
-        Return ONLY a list of subcategory names for {category}, one per line, nothing else.
-        Be specific and consistent."""
-        
-        try:
-            response = self._call_ollama(prompt)
-            # Split response into lines and clean
-            subcategories = [
-                subcat.strip() for subcat in response.split('\n')
-                if subcat.strip() and not subcat.startswith('-')
-            ]
-            return subcategories
-        except Exception as e:
-            logger.error(f"Error processing subcategories: {e}")
-            return []
-        
-class CategoryManager:
-    def __init__(self):
-        self.categories = {}
-        
-    def add_category(self, category: str) -> bool:
-        category = category.strip().title()
-        if category not in self.categories:
-            self.categories[category] = {"subcategories": set()}
-            return True
-        return False
-    
-    def add_subcategory(self, category: str, subcategory: str) -> bool:
-        category = category.strip().title()
-        subcategory = subcategory.strip().title()
-        
-        if category in self.categories:
-            self.categories[category]["subcategories"].add(subcategory)
-            return True
-        return False
-    
-    def get_existing_categories(self) -> List[str]:
-        return list(self.categories.keys())
-    
-    def get_existing_subcategories(self, category: str) -> List[str]:
-        category = category.strip().title()
-        return list(self.categories.get(category, {}).get("subcategories", set()))
-    
-    def save_to_json(self, filename: str = "categories.json"):
-        output_dict = {
-            category: {
-                "subcategories": list(data["subcategories"])
-            }
-            for category, data in self.categories.items()
+        self.abbreviations = {
+            'ss': 'stainless steel',
+            'mnpt': 'male npt',
+            'fnpt': 'female npt',
+            'w/': 'with',
+            'w/o': 'without',
+            'wo': 'without',
+            'w ': 'with ',
         }
         
-        with open(filename, 'w') as f:
-            json.dump(output_dict, f, indent=2)
-        logger.info(f"Categories saved to {filename}")
-
-class ExcelReader:
-    def __init__(self, file_path: str):
-        self.file_path = Path(file_path)
+    def normalize(self, text: str) -> str:
+        if not isinstance(text, str):
+            return ""
+            
+        text = text.lower()
+        text = re.sub(r'[-_]', ' ', text)
+        text = re.sub(r'[^a-z\s]', '', text)
         
-    def get_sheets(self) -> List[str]:
-        return pd.ExcelFile(self.file_path).sheet_names
-    
-    def read_descriptions(self, sheet_name: str, desc_column: str) -> List[str]:
-        df = pd.read_excel(self.file_path, sheet_name=sheet_name)
-        if desc_column not in df.columns:
-            raise ValueError(f"Column {desc_column} not found in sheet")
-        return df[desc_column].dropna().tolist()
+        for abbr, full in self.abbreviations.items():
+            text = re.sub(rf'\b{abbr}\b', full, text)
+        
+        return ' '.join(text.split())
 
-class AIProcessor:
-    def __init__(self):
-        self.model = "mistral"
-        self.api_url = "http://localhost:11434/api/generate"
+    def get_base_product_name(self, text: str) -> str:
+        normalized = self.normalize(text)
+        
+        specs_to_remove = [
+            'with valve', 'without valve', 'with', 'without',
+            'stainless steel', 'male npt', 'female npt',
+        ]
+        
+        for spec in specs_to_remove:
+            normalized = normalized.replace(spec, '').strip()
+        
+        return normalized
 
-    def _call_ollama(self, prompt: str) -> str:
+class CategoryAnalyzer:
+    def __init__(self, excel_file: str):
+        self.excel_file = Path(excel_file)
+        self.df = None
+        self.categories = {}
+        self.normalizer = TextNormalizer()
+        self.similarity_threshold = 0.8
+
+    def load_excel(self) -> bool:
         try:
-            response = requests.post(
-                self.api_url,
-                json={
-                    "model": self.model,
-                    "prompt": prompt,
-                    "stream": False
-                }
-            )
-            if response.status_code == 200:
-                return response.json().get('response', '')
-            else:
-                logger.error(f"Ollama API error: Status code {response.status_code}")
-                return ''
+            self.df = pd.read_excel(self.excel_file)
+            return True
         except Exception as e:
-            logger.error(f"Ollama API error: {e}")
-            return ''
+            logger.error(f"Error loading Excel file: {e}")
+            return False
 
-    def process_for_categories(self, descriptions: List[str], existing_categories: List[str]) -> List[str]:
-        prompt = f"""Analyze these technical product descriptions and identify the main product categories.
-        
-        Existing categories: {', '.join(existing_categories)}
-        Either match to existing categories or create new ones only if truly different.
-        
-        Descriptions:
-        {' | '.join(descriptions)}
-        
-        Return ONLY a list of category names, one per line, nothing else.
-        Be specific and consistent."""
-        
-        response = self._call_ollama(prompt)
-        if not response:
-            return []
-            
-        categories = [
-            cat.strip() for cat in response.split('\n')
-            if cat.strip() and not cat.startswith('-')
-        ]
-        return categories or []  # Return empty list if no categories found
+    def find_similar_groups(self, items: List[str]) -> Dict[str, List[str]]:
+        groups = {}
+        processed = set()
 
-    def process_for_subcategories(self, category: str, descriptions: List[str], existing_subcategories: List[str]) -> List[str]:
-        prompt = f"""For the product category '{category}', analyze these descriptions and identify specific subcategories.
-        
-        Existing subcategories: {', '.join(existing_subcategories)}
-        Either match to existing subcategories or create new ones only if truly different.
-        
-        Descriptions:
-        {' | '.join(descriptions)}
-        
-        Return ONLY a list of subcategory names for {category}, one per line, nothing else.
-        Be specific and consistent."""
-        
-        response = self._call_ollama(prompt)
-        if not response:
-            return []
+        normalized_items = [(item, self.normalizer.get_base_product_name(item)) for item in items]
+
+        for original_item, norm_item1 in normalized_items:
+            if original_item in processed or not norm_item1:
+                continue
+
+            similar_items = [original_item]
+            processed.add(original_item)
+
+            for other_item, norm_item2 in normalized_items:
+                if other_item not in processed:
+                    similarity = SequenceMatcher(None, norm_item1, norm_item2).ratio()
+                    if similarity >= self.similarity_threshold:
+                        similar_items.append(other_item)
+                        processed.add(other_item)
+
+            if similar_items:
+                base_category = min(similar_items, key=lambda x: len(self.normalizer.get_base_product_name(x)))
+                groups[base_category] = similar_items
+
+        return groups
+
+    def analyze_categories(self):
+        try:
+            product_types = self.df['Product Type'].dropna().unique()
+            grouped_products = self.find_similar_groups(product_types)
+
+            for base_category, similar_items in grouped_products.items():
+                base_name = self.normalizer.get_base_product_name(base_category)
+                if not base_name:
+                    continue
+
+                if len(similar_items) > 1:
+                    if base_name not in self.categories:
+                        self.categories[base_name] = {"subcategories": set()}
+
+                    for item in similar_items:
+                        if item != base_category:
+                            self.categories[base_name]["subcategories"].add(item)
+
+            self.categories = {
+                category: data 
+                for category, data in self.categories.items() 
+                if len(data["subcategories"]) > 0
+            }
+
+            self.save_categories()
+
+            # Count total subcategories
+            total_subcategories = sum(len(data["subcategories"]) for data in self.categories.values())
             
-        subcategories = [
-            subcat.strip() for subcat in response.split('\n')
-            if subcat.strip() and not subcat.startswith('-')
-        ]
-        return subcategories or []  # Return empty list if no subcategories found
+            # Print final counts
+            print(f"\nProcessing complete:")
+            print(f"Total Categories: {len(self.categories)}")
+            print(f"Total Subcategories: {total_subcategories}")
+
+        except Exception as e:
+            logger.error(f"Error analyzing categories: {e}")
+            raise
+
+    def save_categories(self, filename: str = "categories.json"):
+        try:
+            output_dict = {
+                category: {
+                    "subcategories": sorted(list(data["subcategories"]))
+                }
+                for category, data in self.categories.items()
+            }
+            
+            with open(filename, 'w') as f:
+                json.dump(output_dict, f, indent=2)
+            
+        except Exception as e:
+            logger.error(f"Error saving categories: {e}")
 
 def main():
-    
-    logger.info("Starting up... waiting for services to be ready")
-    time.sleep(5)  # Give Ollama container time to start
-
-    excel_reader = ExcelReader("input.xlsx")
-    category_manager = CategoryManager()
-    ai_processor = AIProcessor()
-    
     try:
-        # Get available sheets
-        sheets = excel_reader.get_sheets()
-        print("\nAvailable sheets:")
-        for idx, sheet in enumerate(sheets, 1):
-            print(f"{idx}. {sheet}")
-            
-        # Get sheet selection by number
-        while True:
-            try:
-                sheet_num = int(input("\nEnter sheet number: "))
-                if 1 <= sheet_num <= len(sheets):
-                    sheet_name = sheets[sheet_num - 1]
-                    break
-                else:
-                    print(f"Please enter a number between 1 and {len(sheets)}")
-            except ValueError:
-                print("Please enter a valid number")
-
-        # Get description column
-        df = pd.read_excel("input.xlsx", sheet_name=sheet_name)
-        columns = df.columns.tolist()
-        
-        print("\nAvailable columns:")
-        for idx, column in enumerate(columns, 1):
-            print(f"{idx}. {column}")
-            
-        while True:
-            try:
-                column_num = int(input("\nEnter column number: "))
-                if 1 <= column_num <= len(columns):
-                    desc_column = columns[column_num - 1]
-                    break
-                else:
-                    print(f"Please enter a number between 1 and {len(columns)}")
-            except ValueError:
-                print("Please enter a valid number")
-        
-        # Read descriptions
-        descriptions = excel_reader.read_descriptions(sheet_name, desc_column)
-        logger.info(f"Processing {len(descriptions)} descriptions")
-        
-        # Process in batches
-        batch_size = 5
-        for i in range(0, len(descriptions), batch_size):
-            batch = descriptions[i:i + batch_size]
-            
-            # Get categories
-            existing_cats = category_manager.get_existing_categories()
-            new_categories = ai_processor.process_for_categories(batch, existing_cats)
-            
-            if new_categories:  # Only process if categories were found
-                # Process each category
-                for category in new_categories:
-                    category_manager.add_category(category)
-                    
-                    # Get subcategories
-                    existing_subcats = category_manager.get_existing_subcategories(category)
-                    new_subcategories = ai_processor.process_for_subcategories(
-                        category, batch, existing_subcats
-                    )
-                    
-                    # Add subcategories
-                    for subcategory in new_subcategories:
-                        category_manager.add_subcategory(category, subcategory)
-            
-            logger.info(f"Processed batch {i//batch_size + 1}/{(len(descriptions) + batch_size - 1)//batch_size}")
-        
-        # Save results
-        category_manager.save_to_json()
-        logger.info("Processing complete")
-        
+        analyzer = CategoryAnalyzer("input.xlsx")
+        if analyzer.load_excel():
+            analyzer.analyze_categories()
     except Exception as e:
-        logger.error(f"Error during processing: {e}")
+        logger.error(f"Error in main: {e}")
         raise
 
 if __name__ == "__main__":
