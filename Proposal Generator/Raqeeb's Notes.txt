@@ -1,0 +1,22 @@
+Option 1(Local):
+    Hosting - windows or linux server(has to be located within company firewall)
+    Possibly Apache web server, Maybe a SQLLite database or SQL Server Express for tracking the requests
+    Port forwarding for external teams connectivity(don't forget about static IP address)
+    Ngroc for creating secure tunnel(if choosing public URL).  
+
+
+Option 2(Azure):
+    Azure Stuff: 
+        Hosting: Azure App Service
+        Teams communication: Azure Bot Service
+        Azure Storage: for storing temp files and the generated documents
+    
+    Integration Flow:
+        User uploads the excel file in teams chat
+        Bot receives file through the Azure bot Service
+        App does processing
+        Generates the proposal and stores it in Azure Storage
+        Bot sends document link or atachment back to teams
+
+    
+
